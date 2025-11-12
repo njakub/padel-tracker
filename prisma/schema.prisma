@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -26,6 +26,12 @@ enum MatchStatus {
   CANCELLED
 }
 
+// Enum for match side outcomes
+enum MatchSide {
+  TEAM1
+  TEAM2
+}
+
 // Player model
 model Player {
   id        String    @id @default(cuid())
@@ -42,6 +48,7 @@ model Player {
   matchesAsPlayer2 Match[]       @relation("Player2Matches")
   matchesAsPlayer3 Match[]       @relation("Player3Matches")
   matchesAsPlayer4 Match[]       @relation("Player4Matches")
+  matchesSitOut    Match[]       @relation("SitOutMatches")
 }
 
 // Team model for doubles
@@ -74,7 +81,7 @@ model TeamPlayer {
 // Season model
 model Season {
   id          String    @id @default(cuid())
-  name        String
+  name        String    @unique
   startDate   DateTime
   endDate     DateTime?
   isActive    Boolean   @default(true)
@@ -90,10 +97,15 @@ model Season {
 model Match {
   id          String      @id @default(cuid())
   seasonId    String
-  date        DateTime
+  matchNumber Int
+  date        DateTime?
   court       String?
   status      MatchStatus @default(SCHEDULED)
   notes       String?
+  winnerSide  MatchSide?
+  completedAt DateTime?
+  team1Sets   Int         @default(0)
+  team2Sets   Int         @default(0)
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
@@ -112,6 +124,7 @@ model Match {
   // Doubles individual player relations (for flexibility)
   player3Id String?
   player4Id String?
+  sitOutPlayerId String?
 
   // Relations
   season  Season        @relation(fields: [seasonId], references: [id], onDelete: Cascade)
@@ -119,6 +132,7 @@ model Match {
   player2 Player?       @relation("Player2Matches", fields: [player2Id], references: [id], onDelete: SetNull)
   player3 Player?       @relation("Player3Matches", fields: [player3Id], references: [id], onDelete: SetNull)
   player4 Player?       @relation("Player4Matches", fields: [player4Id], references: [id], onDelete: SetNull)
+  sitOutPlayer Player?  @relation("SitOutMatches", fields: [sitOutPlayerId], references: [id], onDelete: SetNull)
   team1   Team?         @relation("Team1Matches", fields: [team1Id], references: [id], onDelete: SetNull)
   team2   Team?         @relation("Team2Matches", fields: [team2Id], references: [id], onDelete: SetNull)
   sets    MatchSet[]
@@ -126,6 +140,8 @@ model Match {
   @@index([seasonId])
   @@index([date])
   @@index([status])
+  @@index([sitOutPlayerId])
+  @@unique([seasonId, matchNumber])
 }
 
 // Match set scores

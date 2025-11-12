@@ -1,0 +1,213 @@
+import { MatchSide, MatchStatus } from "@prisma/client";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { prisma } from "@/lib/prisma";
+
+import { removeMatchResult } from "../matches/actions";
+
+const dateFormatter = new Intl.DateTimeFormat("en", {
+  dateStyle: "medium",
+  timeStyle: "short",
+});
+
+function formatMatchDate(date?: Date | null) {
+  if (!date) {
+    return "Not recorded";
+  }
+  return dateFormatter.format(date);
+}
+
+function formatTeam(
+  members: Array<{ name: string | null | undefined } | null | undefined>
+) {
+  return members
+    .map((player) => player?.name)
+    .filter(Boolean)
+    .join(" & ");
+}
+
+function statusLabel(status: MatchStatus) {
+  switch (status) {
+    case MatchStatus.COMPLETED:
+      return "Completed";
+    case MatchStatus.IN_PROGRESS:
+      return "In Progress";
+    case MatchStatus.CANCELLED:
+      return "Cancelled";
+    default:
+      return "Scheduled";
+  }
+}
+
+export default async function SchedulePage() {
+  const season = await prisma.season.findFirst({
+    where: { isActive: true },
+    orderBy: { startDate: "desc" },
+  });
+
+  if (!season) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Schedule</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            No active season found. Create a season to view the schedule.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const matches = await prisma.match.findMany({
+    where: { seasonId: season.id },
+    include: {
+      player1: { select: { name: true } },
+      player2: { select: { name: true } },
+      player3: { select: { name: true } },
+      player4: { select: { name: true } },
+      sitOutPlayer: { select: { name: true } },
+    },
+    orderBy: { matchNumber: "asc" },
+  });
+
+  if (matches.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Schedule</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            No matches scheduled yet. Add matches to populate the schedule.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const sortedMatches = [...matches].sort((a, b) => {
+    const aNumber = a.matchNumber ?? Number.MAX_SAFE_INTEGER;
+    const bNumber = b.matchNumber ?? Number.MAX_SAFE_INTEGER;
+
+    if (aNumber !== bNumber) {
+      return aNumber - bNumber;
+    }
+
+    const aTime = a.date ? a.date.getTime() : 0;
+    const bTime = b.date ? b.date.getTime() : 0;
+    return aTime - bTime;
+  });
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-semibold">Schedule</h1>
+        <p className="text-sm text-muted-foreground">
+          {season.name} fixtures ordered by match number
+        </p>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base font-semibold">
+            Full schedule
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>#</TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead>Court</TableHead>
+                <TableHead>Team 1</TableHead>
+                <TableHead>Team 2</TableHead>
+                <TableHead>Sit out</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Result</TableHead>
+                <TableHead className="whitespace-normal">Notes</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sortedMatches.map((match, index) => {
+                const matchNumber = match.matchNumber ?? index + 1;
+                const team1 =
+                  formatTeam([match.player1, match.player2]) || "Team 1";
+                const team2 =
+                  formatTeam([match.player3, match.player4]) || "Team 2";
+                const isCompleted = match.status === MatchStatus.COMPLETED;
+                const winnerName =
+                  match.winnerSide === MatchSide.TEAM1
+                    ? team1
+                    : match.winnerSide === MatchSide.TEAM2
+                    ? team2
+                    : null;
+
+                return (
+                  <TableRow key={match.id}>
+                    <TableCell className="font-medium">{matchNumber}</TableCell>
+                    <TableCell>
+                      {isCompleted && match.date
+                        ? formatMatchDate(match.date)
+                        : "—"}
+                    </TableCell>
+                    <TableCell>
+                      {isCompleted && match.court ? match.court : "—"}
+                    </TableCell>
+                    <TableCell>{team1}</TableCell>
+                    <TableCell>{team2}</TableCell>
+                    <TableCell>{match.sitOutPlayer?.name ?? "—"}</TableCell>
+                    <TableCell>
+                      <Badge variant={isCompleted ? "secondary" : "outline"}>
+                        {statusLabel(match.status)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {isCompleted ? (
+                        <div className="flex flex-col">
+                          <span>{winnerName ?? "Pending"}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {match.team1Sets ?? "-"} - {match.team2Sets ?? "-"}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="whitespace-normal">
+                      {match.notes ?? "—"}
+                    </TableCell>
+                    <TableCell>
+                      {isCompleted ? (
+                        <form action={removeMatchResult.bind(null, match.id)}>
+                          <Button variant="outline" size="sm">
+                            Remove result
+                          </Button>
+                        </form>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

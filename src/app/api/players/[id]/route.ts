@@ -1,16 +1,16 @@
 import { Prisma } from "@prisma/client";
-import { NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
 import { playerUpdateSchema } from "@/lib/validations/player";
 
-type RouteContext = {
-  params: { id: string };
+type RouteParams = {
+  params: Promise<{ id: string }>;
 };
 
-export async function GET(_request: Request, context: RouteContext) {
+export async function GET(_request: NextRequest, context: RouteParams) {
   try {
-    const { id } = context.params;
+  const { id } = await context.params;
 
     const player = await prisma.player.findUnique({
       where: { id },
@@ -30,9 +30,9 @@ export async function GET(_request: Request, context: RouteContext) {
   }
 }
 
-export async function PATCH(request: Request, context: RouteContext) {
+export async function PATCH(request: NextRequest, context: RouteParams) {
   try {
-    const { id } = context.params;
+  const { id } = await context.params;
     const json = await request.json();
     const parsed = playerUpdateSchema.safeParse(json);
 
@@ -95,9 +95,9 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 }
 
-export async function DELETE(_request: Request, context: RouteContext) {
+export async function DELETE(_request: NextRequest, context: RouteParams) {
   try {
-    const { id } = context.params;
+  const { id } = await context.params;
 
     await prisma.player.delete({
       where: { id },
