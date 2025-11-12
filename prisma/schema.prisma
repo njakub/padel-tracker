@@ -1,0 +1,145 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Enum for skill tiers
+enum SkillTier {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+  EXPERT
+}
+
+// Enum for match status
+enum MatchStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+// Player model
+model Player {
+  id        String    @id @default(cuid())
+  name      String
+  email     String?   @unique
+  phone     String?
+  skillTier SkillTier @default(INTERMEDIATE)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  // Relations
+  teams            TeamPlayer[]
+  matchesAsPlayer1 Match[]       @relation("Player1Matches")
+  matchesAsPlayer2 Match[]       @relation("Player2Matches")
+  matchesAsPlayer3 Match[]       @relation("Player3Matches")
+  matchesAsPlayer4 Match[]       @relation("Player4Matches")
+}
+
+// Team model for doubles
+model Team {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  players      TeamPlayer[]
+  matchesAsTeam1 Match[]     @relation("Team1Matches")
+  matchesAsTeam2 Match[]     @relation("Team2Matches")
+}
+
+// Join table for Team-Player many-to-many relationship
+model TeamPlayer {
+  id       String @id @default(cuid())
+  teamId   String
+  playerId String
+
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, playerId])
+  @@index([teamId])
+  @@index([playerId])
+}
+
+// Season model
+model Season {
+  id          String    @id @default(cuid())
+  name        String
+  startDate   DateTime
+  endDate     DateTime?
+  isActive    Boolean   @default(true)
+  description String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relations
+  matches Match[]
+}
+
+// Match model
+model Match {
+  id          String      @id @default(cuid())
+  seasonId    String
+  date        DateTime
+  court       String?
+  status      MatchStatus @default(SCHEDULED)
+  notes       String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  // For singles: player1 vs player2
+  // For doubles: team1 (player1+player2) vs team2 (player3+player4)
+  isDoubles Boolean @default(false)
+
+  // Singles relations
+  player1Id String?
+  player2Id String?
+  
+  // Doubles team relations
+  team1Id String?
+  team2Id String?
+  
+  // Doubles individual player relations (for flexibility)
+  player3Id String?
+  player4Id String?
+
+  // Relations
+  season  Season        @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  player1 Player?       @relation("Player1Matches", fields: [player1Id], references: [id], onDelete: SetNull)
+  player2 Player?       @relation("Player2Matches", fields: [player2Id], references: [id], onDelete: SetNull)
+  player3 Player?       @relation("Player3Matches", fields: [player3Id], references: [id], onDelete: SetNull)
+  player4 Player?       @relation("Player4Matches", fields: [player4Id], references: [id], onDelete: SetNull)
+  team1   Team?         @relation("Team1Matches", fields: [team1Id], references: [id], onDelete: SetNull)
+  team2   Team?         @relation("Team2Matches", fields: [team2Id], references: [id], onDelete: SetNull)
+  sets    MatchSet[]
+
+  @@index([seasonId])
+  @@index([date])
+  @@index([status])
+}
+
+// Match set scores
+model MatchSet {
+  id         String   @id @default(cuid())
+  matchId    String
+  setNumber  Int      // 1, 2, 3
+  team1Score Int
+  team2Score Int
+  createdAt  DateTime @default(now())
+
+  // Relations
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, setNumber])
+  @@index([matchId])
+}
