@@ -10,7 +10,7 @@ type RouteParams = {
 
 export async function GET(_request: NextRequest, context: RouteParams) {
   try {
-  const { id } = await context.params;
+    const { id } = await context.params;
 
     const player = await prisma.player.findUnique({
       where: { id },
@@ -32,7 +32,7 @@ export async function GET(_request: NextRequest, context: RouteParams) {
 
 export async function PATCH(request: NextRequest, context: RouteParams) {
   try {
-  const { id } = await context.params;
+    const { id } = await context.params;
     const json = await request.json();
     const parsed = playerUpdateSchema.safeParse(json);
 
@@ -97,7 +97,7 @@ export async function PATCH(request: NextRequest, context: RouteParams) {
 
 export async function DELETE(_request: NextRequest, context: RouteParams) {
   try {
-  const { id } = await context.params;
+    const { id } = await context.params;
 
     await prisma.player.delete({
       where: { id },
