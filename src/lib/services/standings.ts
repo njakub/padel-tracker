@@ -2,8 +2,6 @@ import { MatchSide, MatchStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 
-const POINTS_PER_WIN = 3;
-
 export type StandingRow = {
   playerId: string;
   playerName: string;
@@ -112,7 +110,6 @@ export async function getStandings(
       row.setDifferential = row.setsWon - row.setsLost;
       if (match.winnerSide === MatchSide.TEAM1) {
         row.wins += 1;
-        row.points += POINTS_PER_WIN;
       } else if (match.winnerSide === MatchSide.TEAM2) {
         row.losses += 1;
       }
@@ -127,21 +124,23 @@ export async function getStandings(
       row.setDifferential = row.setsWon - row.setsLost;
       if (match.winnerSide === MatchSide.TEAM2) {
         row.wins += 1;
-        row.points += POINTS_PER_WIN;
       } else if (match.winnerSide === MatchSide.TEAM1) {
         row.losses += 1;
       }
     });
   });
 
-  const rows = Array.from(table.values()).sort((a, b) => {
-    if (b.points !== a.points) return b.points - a.points;
-    if (b.setDifferential !== a.setDifferential) {
-      return b.setDifferential - a.setDifferential;
-    }
-    if (b.setsWon !== a.setsWon) return b.setsWon - a.setsWon;
-    return a.playerName.localeCompare(b.playerName);
-  });
+  const rows = Array.from(table.values())
+    .map((row) => ({
+      ...row,
+      points: row.setDifferential,
+    }))
+    .sort((a, b) => {
+      if (b.points !== a.points) return b.points - a.points;
+      if (b.wins !== a.wins) return b.wins - a.wins;
+      if (b.setsWon !== a.setsWon) return b.setsWon - a.setsWon;
+      return a.playerName.localeCompare(b.playerName);
+    });
 
   return {
     season: {

@@ -14,6 +14,7 @@ import {
 import { prisma } from "@/lib/prisma";
 
 import { removeMatchResult } from "../matches/actions";
+import { MatchEditDialog } from "./match-edit-dialog";
 
 const dateFormatter = new Intl.DateTimeFormat("en", {
   dateStyle: "medium",
@@ -70,17 +71,23 @@ export default async function SchedulePage() {
     );
   }
 
-  const matches = await prisma.match.findMany({
-    where: { seasonId: season.id },
-    include: {
-      player1: { select: { name: true } },
-      player2: { select: { name: true } },
-      player3: { select: { name: true } },
-      player4: { select: { name: true } },
-      sitOutPlayer: { select: { name: true } },
-    },
-    orderBy: { matchNumber: "asc" },
-  });
+  const [matches, players] = await Promise.all([
+    prisma.match.findMany({
+      where: { seasonId: season.id },
+      include: {
+        player1: { select: { name: true } },
+        player2: { select: { name: true } },
+        player3: { select: { name: true } },
+        player4: { select: { name: true } },
+        sitOutPlayer: { select: { name: true } },
+      },
+      orderBy: { matchNumber: "asc" },
+    }),
+    prisma.player.findMany({
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
+  ]);
 
   if (matches.length === 0) {
     return (
@@ -191,15 +198,40 @@ export default async function SchedulePage() {
                       {match.notes ?? "—"}
                     </TableCell>
                     <TableCell>
-                      {isCompleted ? (
-                        <form action={removeMatchResult.bind(null, match.id)}>
-                          <Button variant="outline" size="sm">
-                            Remove result
-                          </Button>
-                        </form>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
+                      <div className="flex flex-col gap-2">
+                        <MatchEditDialog
+                          match={{
+                            id: match.id,
+                            seasonId: match.seasonId,
+                            matchNumber: match.matchNumber,
+                            date: match.date?.toISOString() ?? null,
+                            court: match.court ?? null,
+                            notes: match.notes ?? null,
+                            team1PlayerIds: [
+                              match.player1Id ?? null,
+                              match.player2Id ?? null,
+                            ],
+                            team2PlayerIds: [
+                              match.player3Id ?? null,
+                              match.player4Id ?? null,
+                            ],
+                            sitOutPlayerId: match.sitOutPlayerId ?? null,
+                            status: match.status,
+                            team1Sets: match.team1Sets,
+                            team2Sets: match.team2Sets,
+                            winnerSide: match.winnerSide ?? null,
+                          }}
+                          players={players}
+                        />
+
+                        {isCompleted ? (
+                          <form action={removeMatchResult.bind(null, match.id)}>
+                            <Button variant="outline" size="sm">
+                              Remove result
+                            </Button>
+                          </form>
+                        ) : null}
+                      </div>
                     </TableCell>
                   </TableRow>
                 );

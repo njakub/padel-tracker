@@ -74,6 +74,54 @@ export const matchResultSchema = matchResultBaseSchema.superRefine(
 export type MatchCreateInput = z.infer<typeof matchCreateSchema>;
 export type MatchResultInput = z.infer<typeof matchResultSchema>;
 
+export const matchUpdateSchema = matchCreateSchema
+  .safeExtend({
+    matchId: z.string().min(1, "Match is required"),
+    team1Sets: z.number().int().min(0).max(5).optional(),
+    team2Sets: z.number().int().min(0).max(5).optional(),
+    winnerSide: z.nativeEnum(MatchSide).optional(),
+  })
+  .superRefine((data, ctx) => {
+    const team1Sets = data.team1Sets;
+    const team2Sets = data.team2Sets;
+    const winnerSide = data.winnerSide;
+
+    const hasTeam1Sets = typeof team1Sets === "number";
+    const hasTeam2Sets = typeof team2Sets === "number";
+    const hasWinner = Boolean(winnerSide);
+
+    if (hasWinner && (!hasTeam1Sets || !hasTeam2Sets)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Provide both scores when selecting a winner",
+        path: ["team1Sets"],
+      });
+      return;
+    }
+
+    if ((hasTeam1Sets || hasTeam2Sets) && !hasWinner) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Select the winning team",
+        path: ["winnerSide"],
+      });
+      return;
+    }
+
+    if (hasTeam1Sets && hasTeam2Sets && hasWinner) {
+      validateMatchResultSets(
+        {
+          winnerSide: winnerSide!,
+          team1Sets,
+          team2Sets,
+        },
+        ctx
+      );
+    }
+  });
+
+export type MatchUpdateInput = z.infer<typeof matchUpdateSchema>;
+
 export const matchResultWithMatchSchema = matchResultBaseSchema
   .safeExtend({
     matchId: z.string().min(1, "Select a match"),
