@@ -1,9 +1,10 @@
 "use server";
 
-import { MatchStatus } from "@prisma/client";
+import { AdminRole, MatchStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
 import { prisma } from "@/lib/prisma";
+import { auth, type AuthRole } from "@/lib/auth";
 import {
   MatchCreateInput,
   MatchResultWithMatchInput,
@@ -12,6 +13,37 @@ import {
   matchResultWithMatchSchema,
   matchUpdateSchema,
 } from "@/lib/validations/match";
+
+type SessionAdmin = {
+  role: AuthRole;
+  adminSeasonIds: string[];
+};
+
+async function getSessionAdmin(): Promise<SessionAdmin> {
+  const session = await auth();
+  const role = session?.user?.role;
+  const adminSeasonIds = session?.user?.adminSeasonIds ?? [];
+
+  if (!role) {
+    throw new Error("You do not have permission to perform this action");
+  }
+
+  return { role, adminSeasonIds } satisfies SessionAdmin;
+}
+
+async function requireAdminForSeason(seasonId: string): Promise<SessionAdmin> {
+  const admin = await getSessionAdmin();
+
+  if (admin.role === AdminRole.SUPER_ADMIN) {
+    return admin;
+  }
+
+  if (admin.adminSeasonIds.includes(seasonId)) {
+    return admin;
+  }
+
+  throw new Error("You do not have permission to manage this season");
+}
 
 function parseMatchCreateForm(formData: FormData): MatchCreateInput {
   const seasonId = formData.get("seasonId")?.toString() ?? "";
@@ -118,6 +150,7 @@ async function revalidateMatchesRoutes() {
 export async function createMatch(formData: FormData) {
   try {
     const data = parseMatchCreateForm(formData);
+    await requireAdminForSeason(data.seasonId);
 
     const matchNumber =
       data.matchNumber ??
@@ -169,6 +202,17 @@ export async function recordMatchResult(formData: FormData) {
       court,
     } = data;
 
+    const match = await prisma.match.findUnique({
+      where: { id: matchId },
+      select: { seasonId: true },
+    });
+
+    if (!match) {
+      throw new Error("Match not found");
+    }
+
+    await requireAdminForSeason(match.seasonId);
+
     await prisma.match.update({
       where: { id: matchId },
       data: {
@@ -196,6 +240,16 @@ export async function recordMatchResult(formData: FormData) {
 
 export async function removeMatchResult(matchId: string) {
   try {
+    const match = await prisma.match.findUnique({
+      where: { id: matchId },
+      select: { seasonId: true },
+    });
+
+    if (!match) {
+      throw new Error("Match not found");
+    }
+
+    await requireAdminForSeason(match.seasonId);
     await prisma.match.update({
       where: { id: matchId },
       data: {
@@ -229,6 +283,7 @@ export const reopenMatch = removeMatchResult;
 export async function updateMatch(formData: FormData) {
   try {
     const data = parseMatchUpdateForm(formData);
+    await requireAdminForSeason(data.seasonId);
     const [team1Player1, team1Player2] = data.team1PlayerIds;
     const [team2Player1, team2Player2] = data.team2PlayerIds;
 

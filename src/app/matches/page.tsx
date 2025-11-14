@@ -1,9 +1,10 @@
-import { MatchSide, MatchStatus } from "@prisma/client";
+import { AdminRole, MatchSide, MatchStatus } from "@prisma/client";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/lib/auth";
 
 import { removeMatchResult } from "./actions";
 import { MatchResultForm } from "./match-result-form";
@@ -36,6 +37,8 @@ function formatTeam(
 }
 
 export default async function MatchesPage() {
+  const session = await auth();
+
   const season = await prisma.season.findFirst({
     where: { isActive: true },
     orderBy: { startDate: "desc" },
@@ -67,6 +70,11 @@ export default async function MatchesPage() {
     },
     orderBy: [{ status: "asc" }, { matchNumber: "asc" }],
   });
+
+  const isSeasonAdmin =
+    session?.user?.role === AdminRole.SUPER_ADMIN ||
+    (session?.user?.role === AdminRole.SEASON_ADMIN &&
+      session.user?.adminSeasonIds?.includes(season.id));
 
   const scheduledMatches = matches
     .filter((match) => match.status !== MatchStatus.COMPLETED)
@@ -114,11 +122,15 @@ export default async function MatchesPage() {
               All scheduled matches are up to date. Create a new match or reopen
               one to log a result.
             </p>
-          ) : (
+          ) : isSeasonAdmin ? (
             <MatchResultForm
               matches={matchOptions}
               defaultDateValue={defaultDateValue}
             />
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Admin access is required to record match results.
+            </p>
           )}
         </CardContent>
       </Card>
@@ -178,11 +190,13 @@ export default async function MatchesPage() {
                         {match.notes}
                       </p>
                     ) : null}
-                    <form action={removeMatchResult.bind(null, match.id)}>
-                      <Button type="submit" variant="destructive" size="sm">
-                        Remove result
-                      </Button>
-                    </form>
+                    {isSeasonAdmin ? (
+                      <form action={removeMatchResult.bind(null, match.id)}>
+                        <Button type="submit" variant="destructive" size="sm">
+                          Remove result
+                        </Button>
+                      </form>
+                    ) : null}
                   </CardContent>
                 </Card>
               );

@@ -32,6 +32,11 @@ enum MatchSide {
   TEAM2
 }
 
+enum AdminRole {
+  SUPER_ADMIN
+  SEASON_ADMIN
+}
+
 // Player model
 model Player {
   id        String    @id @default(cuid())
@@ -49,6 +54,18 @@ model Player {
   matchesAsPlayer3 Match[]       @relation("Player3Matches")
   matchesAsPlayer4 Match[]       @relation("Player4Matches")
   matchesSitOut    Match[]       @relation("SitOutMatches")
+}
+
+model AdminUser {
+  id           String       @id @default(cuid())
+  email        String       @unique
+  name         String?
+  passwordHash String
+  role         AdminRole    @default(SEASON_ADMIN)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  seasons SeasonAdmin[]
 }
 
 // Team model for doubles
@@ -91,6 +108,7 @@ model Season {
 
   // Relations
   matches Match[]
+  admins  SeasonAdmin[]
 }
 
 // Match model
@@ -158,4 +176,18 @@ model MatchSet {
 
   @@unique([matchId, setNumber])
   @@index([matchId])
+}
+
+model SeasonAdmin {
+  id           String    @id @default(cuid())
+  seasonId     String
+  adminUserId  String
+  createdAt    DateTime  @default(now())
+
+  season Season   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  admin  AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@unique([seasonId, adminUserId])
+  @@index([adminUserId])
+  @@index([seasonId])
 }

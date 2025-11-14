@@ -1,4 +1,4 @@
-import { MatchSide, MatchStatus } from "@prisma/client";
+import { AdminRole, MatchSide, MatchStatus } from "@prisma/client";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/lib/auth";
 
 import { removeMatchResult } from "../matches/actions";
 import { MatchEditDialog } from "./match-edit-dialog";
@@ -51,6 +52,8 @@ function statusLabel(status: MatchStatus) {
 }
 
 export default async function SchedulePage() {
+  const session = await auth();
+
   const season = await prisma.season.findFirst({
     where: { isActive: true },
     orderBy: { startDate: "desc" },
@@ -116,6 +119,11 @@ export default async function SchedulePage() {
     const bTime = b.date ? b.date.getTime() : 0;
     return aTime - bTime;
   });
+
+  const canManageSeason =
+    session?.user?.role === AdminRole.SUPER_ADMIN ||
+    (session?.user?.role === AdminRole.SEASON_ADMIN &&
+      session.user?.adminSeasonIds?.includes(season.id));
 
   return (
     <div className="space-y-6">
@@ -198,40 +206,47 @@ export default async function SchedulePage() {
                       {match.notes ?? "—"}
                     </TableCell>
                     <TableCell>
-                      <div className="flex flex-col gap-2">
-                        <MatchEditDialog
-                          match={{
-                            id: match.id,
-                            seasonId: match.seasonId,
-                            matchNumber: match.matchNumber,
-                            date: match.date?.toISOString() ?? null,
-                            court: match.court ?? null,
-                            notes: match.notes ?? null,
-                            team1PlayerIds: [
-                              match.player1Id ?? null,
-                              match.player2Id ?? null,
-                            ],
-                            team2PlayerIds: [
-                              match.player3Id ?? null,
-                              match.player4Id ?? null,
-                            ],
-                            sitOutPlayerId: match.sitOutPlayerId ?? null,
-                            status: match.status,
-                            team1Sets: match.team1Sets,
-                            team2Sets: match.team2Sets,
-                            winnerSide: match.winnerSide ?? null,
-                          }}
-                          players={players}
-                        />
+                      {canManageSeason ? (
+                        <div className="flex flex-col gap-2">
+                          <MatchEditDialog
+                            canEdit={canManageSeason}
+                            match={{
+                              id: match.id,
+                              seasonId: match.seasonId,
+                              matchNumber: match.matchNumber,
+                              date: match.date?.toISOString() ?? null,
+                              court: match.court ?? null,
+                              notes: match.notes ?? null,
+                              team1PlayerIds: [
+                                match.player1Id ?? null,
+                                match.player2Id ?? null,
+                              ],
+                              team2PlayerIds: [
+                                match.player3Id ?? null,
+                                match.player4Id ?? null,
+                              ],
+                              sitOutPlayerId: match.sitOutPlayerId ?? null,
+                              status: match.status,
+                              team1Sets: match.team1Sets,
+                              team2Sets: match.team2Sets,
+                              winnerSide: match.winnerSide ?? null,
+                            }}
+                            players={players}
+                          />
 
-                        {isCompleted ? (
-                          <form action={removeMatchResult.bind(null, match.id)}>
-                            <Button variant="outline" size="sm">
-                              Remove result
-                            </Button>
-                          </form>
-                        ) : null}
-                      </div>
+                          {isCompleted ? (
+                            <form
+                              action={removeMatchResult.bind(null, match.id)}
+                            >
+                              <Button variant="outline" size="sm">
+                                Remove result
+                              </Button>
+                            </form>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                   </TableRow>
                 );

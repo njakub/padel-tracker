@@ -75,9 +75,18 @@ type MatchForEdit = {
 type MatchEditDialogProps = {
   match: MatchForEdit;
   players: PlayerOption[];
+  canEdit?: boolean;
 };
 
-export function MatchEditDialog({ match, players }: MatchEditDialogProps) {
+export function MatchEditDialog({
+  match,
+  players,
+  canEdit = true,
+}: MatchEditDialogProps) {
+  if (!canEdit) {
+    return null;
+  }
+
   const defaultDateValue = toDateTimeLocalValue(match.date);
   const hasCustomCourt = Boolean(
     match.court &&
