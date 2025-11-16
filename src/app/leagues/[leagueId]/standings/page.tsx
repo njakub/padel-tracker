@@ -1,3 +1,5 @@
+import { notFound } from "next/navigation";
+
 import { getStandings } from "@/lib/services/standings";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -8,6 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { prisma } from "@/lib/prisma";
 
 function formatDateRange(startDate: Date, endDate?: Date | null) {
   const formatter = new Intl.DateTimeFormat("en", { dateStyle: "medium" });
@@ -20,8 +23,25 @@ function formatDateRange(startDate: Date, endDate?: Date | null) {
   return `${start} – ${formatter.format(endDate)}`;
 }
 
-export default async function StandingsPage() {
-  const { season, rows } = await getStandings();
+type StandingsPageProps = {
+  params: Promise<{ leagueId: string }>;
+};
+
+export default async function LeagueStandingsPage({
+  params,
+}: StandingsPageProps) {
+  const { leagueId } = await params;
+
+  const leagueExists = await prisma.league.findUnique({
+    where: { id: leagueId },
+    select: { id: true },
+  });
+
+  if (!leagueExists) {
+    notFound();
+  }
+
+  const { season, rows } = await getStandings({ leagueId });
 
   if (!season) {
     return (
@@ -42,14 +62,14 @@ export default async function StandingsPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-semibold">Standings</h1>
+        <h2 className="text-xl font-semibold">Standings</h2>
         <p className="text-sm text-muted-foreground">
           {season.name} · {formatDateRange(season.startDate, season.endDate)}
         </p>
       </div>
       <p className="text-xs text-muted-foreground">
-        Scoring: +1 point per game won and an extra +1 for each match victory.
-        Ties break on total games won, then game differential.
+        Scoring: +1 point for every game won, plus an extra +1 for each match
+        victory. Ties break on total games won, then game differential.
       </p>
 
       <Card>

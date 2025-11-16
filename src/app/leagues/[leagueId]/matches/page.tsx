@@ -1,12 +1,12 @@
-export const dynamic = "force-dynamic";
-
-import { MatchSide, MatchStatus } from "@prisma/client";
+import { LeagueRole, MatchSide, MatchStatus } from "@prisma/client";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
+
+import { canManageLeague } from "@/lib/server/league-auth";
 
 import { removeMatchResult } from "./actions";
 import { MatchResultForm } from "./match-result-form";
@@ -38,19 +38,33 @@ function formatTeam(
     .join(" & ");
 }
 
-export default async function MatchesPage() {
-  const session = await auth();
+type MatchesPageProps = {
+  params: Promise<{ leagueId: string }>;
+};
 
-  const season = await prisma.season.findFirst({
-    where: { isActive: true },
-    orderBy: { startDate: "desc" },
-  });
+export default async function LeagueMatchesPage({ params }: MatchesPageProps) {
+  const { leagueId } = await params;
+  const session = await auth();
+  const userId = session?.user?.id ?? null;
+
+  const [membership, season] = await Promise.all([
+    userId
+      ? prisma.leagueMembership.findUnique({
+          where: { leagueId_userId: { leagueId, userId } },
+          select: { role: true },
+        })
+      : Promise.resolve(null),
+    prisma.season.findFirst({
+      where: { leagueId, isActive: true },
+      orderBy: { startDate: "desc" },
+    }),
+  ]);
 
   if (!season) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Add Matches</CardTitle>
+          <CardTitle>Matches</CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
@@ -73,7 +87,11 @@ export default async function MatchesPage() {
     orderBy: [{ status: "asc" }, { matchNumber: "asc" }],
   });
 
-  const isSeasonAdmin = session?.user?.systemRole === "SUPER_ADMIN";
+  const isLeagueManager = canManageLeague(
+    membership?.role ?? null,
+    session?.user?.systemRole,
+    LeagueRole.ADMIN
+  );
 
   const scheduledMatches = matches
     .filter((match) => match.status !== MatchStatus.COMPLETED)
@@ -103,7 +121,7 @@ export default async function MatchesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Matches</h1>
+        <h2 className="text-xl font-semibold">Matches</h2>
         <p className="text-sm text-muted-foreground">
           Manage fixtures and record results for {season.name}
         </p>
@@ -121,7 +139,7 @@ export default async function MatchesPage() {
               All scheduled matches are up to date. Create a new match or reopen
               one to log a result.
             </p>
-          ) : isSeasonAdmin ? (
+          ) : isLeagueManager ? (
             <MatchResultForm
               matches={matchOptions}
               defaultDateValue={defaultDateValue}
@@ -134,10 +152,8 @@ export default async function MatchesPage() {
         </CardContent>
       </Card>
 
-      {/* TODO: Re-enable the create match form when fixtures are editable again. */}
-
       <div className="space-y-4">
-        <h2 className="text-xl font-semibold">Completed</h2>
+        <h3 className="text-lg font-semibold">Completed</h3>
         {completedMatches.length === 0 ? (
           <Card>
             <CardContent className="py-6 text-sm text-muted-foreground">
@@ -189,7 +205,7 @@ export default async function MatchesPage() {
                         {match.notes}
                       </p>
                     ) : null}
-                    {isSeasonAdmin ? (
+                    {isLeagueManager ? (
                       <form action={removeMatchResult.bind(null, match.id)}>
                         <Button type="submit" variant="destructive" size="sm">
                           Remove result

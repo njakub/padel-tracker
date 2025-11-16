@@ -9,9 +9,9 @@ export type StandingRow = {
   wins: number;
   losses: number;
   points: number;
-  setsWon: number;
-  setsLost: number;
-  setDifferential: number;
+  gamesWon: number;
+  gamesLost: number;
+  gameDifferential: number;
 };
 
 export type StandingsResponse = {
@@ -24,13 +24,20 @@ export type StandingsResponse = {
   rows: StandingRow[];
 };
 
-export async function getStandings(
-  seasonId?: string
-): Promise<StandingsResponse> {
+export async function getStandings(params?: {
+  leagueId?: string;
+  seasonId?: string;
+}): Promise<StandingsResponse> {
+  const leagueId = params?.leagueId;
+  const seasonId = params?.seasonId;
+
   const season = seasonId
     ? await prisma.season.findUnique({ where: { id: seasonId } })
     : await prisma.season.findFirst({
-        where: { isActive: true },
+        where: {
+          ...(leagueId ? { leagueId } : {}),
+          isActive: true,
+        },
         orderBy: { startDate: "desc" },
       });
 
@@ -67,9 +74,9 @@ export async function getStandings(
         wins: 0,
         losses: 0,
         points: 0,
-        setsWon: 0,
-        setsLost: 0,
-        setDifferential: 0,
+        gamesWon: 0,
+        gamesLost: 0,
+        gameDifferential: 0,
       });
     }
     return table.get(playerId)!;
@@ -98,18 +105,20 @@ export async function getStandings(
       return;
     }
 
-    const team1Sets = match.team1Sets ?? 0;
-    const team2Sets = match.team2Sets ?? 0;
+    const team1Games = match.team1Sets ?? 0;
+    const team2Games = match.team2Sets ?? 0;
 
     team1.forEach(({ id, name }) => {
       const row = ensureRow(id, name ?? undefined);
       if (!row) return;
       row.matchesPlayed += 1;
-      row.setsWon += team1Sets;
-      row.setsLost += team2Sets;
-      row.setDifferential = row.setsWon - row.setsLost;
+      row.gamesWon += team1Games;
+      row.gamesLost += team2Games;
+      row.points += team1Games;
+      row.gameDifferential = row.gamesWon - row.gamesLost;
       if (match.winnerSide === MatchSide.TEAM1) {
         row.wins += 1;
+        row.points += 1;
       } else if (match.winnerSide === MatchSide.TEAM2) {
         row.losses += 1;
       }
@@ -119,11 +128,13 @@ export async function getStandings(
       const row = ensureRow(id, name ?? undefined);
       if (!row) return;
       row.matchesPlayed += 1;
-      row.setsWon += team2Sets;
-      row.setsLost += team1Sets;
-      row.setDifferential = row.setsWon - row.setsLost;
+      row.gamesWon += team2Games;
+      row.gamesLost += team1Games;
+      row.points += team2Games;
+      row.gameDifferential = row.gamesWon - row.gamesLost;
       if (match.winnerSide === MatchSide.TEAM2) {
         row.wins += 1;
+        row.points += 1;
       } else if (match.winnerSide === MatchSide.TEAM1) {
         row.losses += 1;
       }
@@ -133,12 +144,14 @@ export async function getStandings(
   const rows = Array.from(table.values())
     .map((row) => ({
       ...row,
-      points: row.setDifferential,
     }))
     .sort((a, b) => {
       if (b.points !== a.points) return b.points - a.points;
       if (b.wins !== a.wins) return b.wins - a.wins;
-      if (b.setsWon !== a.setsWon) return b.setsWon - a.setsWon;
+      if (b.gamesWon !== a.gamesWon) return b.gamesWon - a.gamesWon;
+      if (b.gameDifferential !== a.gameDifferential) {
+        return b.gameDifferential - a.gameDifferential;
+      }
       return a.playerName.localeCompare(b.playerName);
     });
 

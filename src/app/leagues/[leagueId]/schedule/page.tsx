@@ -1,6 +1,4 @@
-export const dynamic = "force-dynamic";
-
-import { MatchSide, MatchStatus } from "@prisma/client";
+import { LeagueRole, MatchSide, MatchStatus } from "@prisma/client";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,6 +13,8 @@ import {
 } from "@/components/ui/table";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
+
+import { canManageLeague } from "@/lib/server/league-auth";
 
 import { removeMatchResult } from "../matches/actions";
 import { MatchEditDialog } from "./match-edit-dialog";
@@ -53,13 +53,29 @@ function statusLabel(status: MatchStatus) {
   }
 }
 
-export default async function SchedulePage() {
-  const session = await auth();
+type SchedulePageProps = {
+  params: Promise<{ leagueId: string }>;
+};
 
-  const season = await prisma.season.findFirst({
-    where: { isActive: true },
-    orderBy: { startDate: "desc" },
-  });
+export default async function LeagueSchedulePage({
+  params,
+}: SchedulePageProps) {
+  const { leagueId } = await params;
+  const session = await auth();
+  const userId = session?.user?.id ?? null;
+
+  const [membership, season] = await Promise.all([
+    userId
+      ? prisma.leagueMembership.findUnique({
+          where: { leagueId_userId: { leagueId, userId } },
+          select: { role: true },
+        })
+      : Promise.resolve(null),
+    prisma.season.findFirst({
+      where: { leagueId, isActive: true },
+      orderBy: { startDate: "desc" },
+    }),
+  ]);
 
   if (!season) {
     return (
@@ -89,6 +105,7 @@ export default async function SchedulePage() {
       orderBy: { matchNumber: "asc" },
     }),
     prisma.player.findMany({
+      where: { leagueId },
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     }),
@@ -122,12 +139,16 @@ export default async function SchedulePage() {
     return aTime - bTime;
   });
 
-  const canManageSeason = session?.user?.systemRole === "SUPER_ADMIN";
+  const canManageSeason = canManageLeague(
+    membership?.role ?? null,
+    session?.user?.systemRole,
+    LeagueRole.ADMIN
+  );
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Schedule</h1>
+        <h2 className="text-xl font-semibold">Schedule</h2>
         <p className="text-sm text-muted-foreground">
           {season.name} fixtures ordered by match number
         </p>
@@ -212,7 +233,7 @@ export default async function SchedulePage() {
                             match={{
                               id: match.id,
                               seasonId: match.seasonId,
-                              matchNumber: match.matchNumber,
+                              matchNumber: match.matchNumber ?? index + 1,
                               date: match.date?.toISOString() ?? null,
                               court: match.court ?? null,
                               notes: match.notes ?? null,

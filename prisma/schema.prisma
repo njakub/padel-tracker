@@ -32,14 +32,22 @@ enum MatchSide {
   TEAM2
 }
 
-enum AdminRole {
+// Enum for user access within a specific league
+enum LeagueRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+// Optional system-level role for out-of-band maintenance
+enum SystemRole {
   SUPER_ADMIN
-  SEASON_ADMIN
 }
 
 // Player model
 model Player {
   id        String    @id @default(cuid())
+  leagueId  String
   name      String
   email     String?   @unique
   phone     String?
@@ -47,25 +55,78 @@ model Player {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
-  // Relations
+  league           League       @relation(fields: [leagueId], references: [id], onDelete: Cascade)
   teams            TeamPlayer[]
-  matchesAsPlayer1 Match[]       @relation("Player1Matches")
-  matchesAsPlayer2 Match[]       @relation("Player2Matches")
-  matchesAsPlayer3 Match[]       @relation("Player3Matches")
-  matchesAsPlayer4 Match[]       @relation("Player4Matches")
-  matchesSitOut    Match[]       @relation("SitOutMatches")
+  matchesAsPlayer1 Match[]      @relation("Player1Matches")
+  matchesAsPlayer2 Match[]      @relation("Player2Matches")
+  matchesAsPlayer3 Match[]      @relation("Player3Matches")
+  matchesAsPlayer4 Match[]      @relation("Player4Matches")
+  matchesSitOut    Match[]      @relation("SitOutMatches")
+  memberships      LeagueMembership[] @relation("MembershipPlayers")
+
+  @@unique([leagueId, name])
 }
 
-model AdminUser {
+model User {
   id           String       @id @default(cuid())
   email        String       @unique
   name         String?
   passwordHash String
-  role         AdminRole    @default(SEASON_ADMIN)
+  systemRole   SystemRole?
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 
-  seasons SeasonAdmin[]
+  memberships      LeagueMembership[]
+  invitationsSent  LeagueInvitation[] @relation("InvitationsSent")
+  leaguesCreated   League[]           @relation("LeagueCreator")
+}
+
+model League {
+  id          String             @id @default(cuid())
+  name        String
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  createdById String
+
+  createdBy    User                @relation("LeagueCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  seasons      Season[]
+  memberships  LeagueMembership[]
+  invitations  LeagueInvitation[]
+  players      Player[]
+  teamPlayers  TeamPlayer[]
+}
+
+model LeagueMembership {
+  id        String     @id @default(cuid())
+  leagueId  String
+  userId    String
+  role      LeagueRole @default(MEMBER)
+  playerId  String?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  league League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  player Player? @relation("MembershipPlayers", fields: [playerId], references: [id], onDelete: SetNull)
+
+  @@unique([leagueId, userId])
+  @@index([userId])
+  @@index([playerId])
+}
+
+model LeagueInvitation {
+  id            String     @id @default(cuid())
+  leagueId      String
+  invitedById   String
+  role          LeagueRole @default(ADMIN)
+  token         String     @unique
+  invitedEmail  String?
+  acceptedAt    DateTime?
+  expiresAt     DateTime?
+  createdAt     DateTime   @default(now())
+
+  league     League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  invitedBy  User   @relation("InvitationsSent", fields: [invitedById], references: [id], onDelete: Cascade)
 }
 
 // Team model for doubles
@@ -90,6 +151,9 @@ model TeamPlayer {
   team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
   player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
 
+  leagueId  String
+
+  league League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
   @@unique([teamId, playerId])
   @@index([teamId])
   @@index([playerId])
@@ -105,10 +169,11 @@ model Season {
   description String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+  leagueId    String
 
   // Relations
   matches Match[]
-  admins  SeasonAdmin[]
+  league  League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
 }
 
 // Match model
@@ -176,18 +241,4 @@ model MatchSet {
 
   @@unique([matchId, setNumber])
   @@index([matchId])
-}
-
-model SeasonAdmin {
-  id           String    @id @default(cuid())
-  seasonId     String
-  adminUserId  String
-  createdAt    DateTime  @default(now())
-
-  season Season   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
-  admin  AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
-
-  @@unique([seasonId, adminUserId])
-  @@index([adminUserId])
-  @@index([seasonId])
 }

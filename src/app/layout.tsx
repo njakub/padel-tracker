@@ -1,4 +1,3 @@
-import { AdminRole } from "@prisma/client";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Geist, Geist_Mono } from "next/font/google";
@@ -16,12 +15,6 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const navLinks = [
-  { href: "/", label: "Standings" },
-  { href: "/matches", label: "Matches" },
-  { href: "/schedule", label: "Schedule" },
-];
-
 export const metadata: Metadata = {
   title: "Padel Tracker",
   description: "Keep tabs on matches, schedule, and standings",
@@ -34,11 +27,14 @@ export default async function RootLayout({
 }>) {
   const session = await auth();
   const isSignedIn = Boolean(session?.user);
-  const links = [...navLinks];
-
-  if (session?.user?.role === AdminRole.SUPER_ADMIN) {
-    links.push({ href: "/admins", label: "Admins" });
-  }
+  const links = [
+    { href: "/", label: "Home" },
+    { href: "/leagues", label: "Leagues" },
+    ...(isSignedIn ? [{ href: "/profile", label: "Profile" }] : []),
+    ...(session?.user?.systemRole === "SUPER_ADMIN"
+      ? [{ href: "/admins", label: "Admins" }]
+      : []),
+  ];
 
   const signOutAction = async () => {
     "use server";

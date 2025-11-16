@@ -1,10 +1,10 @@
 "use server";
 
-import { MatchStatus } from "@prisma/client";
+import { LeagueRole, MatchStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
 import { prisma } from "@/lib/prisma";
-import { auth } from "@/lib/auth";
+import { requireLeagueRole } from "@/lib/server/league-auth";
 import {
   MatchCreateInput,
   MatchResultWithMatchInput,
@@ -14,82 +14,17 @@ import {
   matchUpdateSchema,
 } from "@/lib/validations/match";
 
-const FALLBACK_LEAGUE_ROLE = {
-  MEMBER: "MEMBER",
-  ADMIN: "ADMIN",
-  OWNER: "OWNER",
-} as const;
-
-type LeagueRole =
-  (typeof FALLBACK_LEAGUE_ROLE)[keyof typeof FALLBACK_LEAGUE_ROLE];
-
-const FALLBACK_SYSTEM_ROLE = {
-  SUPER_ADMIN: "SUPER_ADMIN",
-} as const;
-
-const leagueRolePriority: Record<string, number> = {
-  [FALLBACK_LEAGUE_ROLE.MEMBER]: 0,
-  [FALLBACK_LEAGUE_ROLE.ADMIN]: 1,
-  [FALLBACK_LEAGUE_ROLE.OWNER]: 2,
-};
-
-async function requireSessionUser() {
-  const session = await auth();
-
-  if (!session?.user?.id) {
-    throw new Error("You must be signed in to manage matches");
-  }
-
-  return session.user;
-}
-
-async function requireLeagueRole(
-  leagueId: string,
-  minimumRole: LeagueRole = FALLBACK_LEAGUE_ROLE.ADMIN
-) {
-  const user = await requireSessionUser();
-
-  if (user.systemRole === FALLBACK_SYSTEM_ROLE.SUPER_ADMIN) {
-    return { userId: user.id, membershipRole: FALLBACK_LEAGUE_ROLE.OWNER };
-  }
-
-  const membership = await prisma.leagueMembership.findUnique({
-    where: {
-      leagueId_userId: {
-        leagueId,
-        userId: user.id,
-      },
-    },
-    select: { role: true },
-  });
-
-  if (!membership) {
-    throw new Error("You are not a member of this league");
-  }
-
-  const membershipRole = (membership.role ??
-    FALLBACK_LEAGUE_ROLE.MEMBER) as LeagueRole;
-
-  if (
-    (leagueRolePriority[membershipRole] ?? 0) < leagueRolePriority[minimumRole]
-  ) {
-    throw new Error("You do not have permission to manage this league");
-  }
-
-  return { userId: user.id, membershipRole };
-}
-
 async function requireAdminForSeason(seasonId: string) {
-  const season = await prisma.season.findUnique({
+  const season = (await prisma.season.findUnique({
     where: { id: seasonId },
     select: { leagueId: true },
-  });
+  })) as { leagueId: string } | null;
 
   if (!season) {
     throw new Error("Season not found");
   }
 
-  await requireLeagueRole(season.leagueId, FALLBACK_LEAGUE_ROLE.ADMIN);
+  await requireLeagueRole(season.leagueId, LeagueRole.ADMIN);
 
   return season.leagueId;
 }
@@ -250,10 +185,10 @@ export async function recordMatchResult(formData: FormData) {
       court,
     } = data;
 
-    const match = await prisma.match.findUnique({
+    const match = (await prisma.match.findUnique({
       where: { id: matchId },
       select: { seasonId: true },
-    });
+    })) as { seasonId: string } | null;
 
     if (!match) {
       throw new Error("Match not found");
@@ -288,10 +223,10 @@ export async function recordMatchResult(formData: FormData) {
 
 export async function removeMatchResult(matchId: string) {
   try {
-    const match = await prisma.match.findUnique({
+    const match = (await prisma.match.findUnique({
       where: { id: matchId },
       select: { seasonId: true },
-    });
+    })) as { seasonId: string } | null;
 
     if (!match) {
       throw new Error("Match not found");
