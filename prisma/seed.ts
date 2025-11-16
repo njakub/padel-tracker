@@ -96,6 +96,17 @@ const schedule = [
 ] as const;
 
 async function main() {
+  const league = await prisma.league.findFirst({
+    where: { name: "Magabull Padel" },
+    select: { id: true },
+  });
+
+  if (!league) {
+    throw new Error(
+      "Seed requires an existing league named 'Magabull Padel'. Create it before running the seed."
+    );
+  }
+
   const playersData = [
     { name: "Matt", email: "matt@example.com" },
     { name: "Joe", email: "joe@example.com" },
@@ -112,11 +123,15 @@ async function main() {
       update: {
         name: player.name,
         skillTier: SkillTier.INTERMEDIATE,
+        leagueId: league.id,
       },
       create: {
         name: player.name,
         email: player.email,
         skillTier: SkillTier.INTERMEDIATE,
+        league: {
+          connect: { id: league.id },
+        },
       },
     });
 
@@ -128,12 +143,16 @@ async function main() {
     update: {
       isActive: true,
       endDate: null,
+      leagueId: league.id,
     },
     create: {
       name: "Season 1",
       startDate: new Date("2025-01-06T18:00:00.000Z"),
       isActive: true,
       description: "Inaugural padel league season",
+      league: {
+        connect: { id: league.id },
+      },
     },
   });
 

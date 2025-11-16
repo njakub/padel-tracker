@@ -2,6 +2,7 @@ import { SkillTier } from "@prisma/client";
 import { z } from "zod";
 
 export const playerSchema = z.object({
+  leagueId: z.string().min(1, "League is required"),
   name: z.string().min(1, "Name is required").max(100),
   email: z.string().email().optional().or(z.literal("")),
   phone: z.string().min(3).max(30).optional().or(z.literal("")),

@@ -9,8 +9,13 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const search = searchParams.get("search")?.trim();
     const skillTierParam = searchParams.get("skillTier") as SkillTier | null;
+    const leagueIdParam = searchParams.get("leagueId")?.trim();
 
     const where: Prisma.PlayerWhereInput = {};
+
+    if (leagueIdParam) {
+      where.leagueId = leagueIdParam;
+    }
 
     if (search) {
       where.OR = [
@@ -50,10 +55,11 @@ export async function POST(request: Request) {
       );
     }
 
-    const { name, email, phone, skillTier } = parsed.data;
+    const { leagueId, name, email, phone, skillTier } = parsed.data;
 
     const player = await prisma.player.create({
       data: {
+        leagueId,
         name,
         email: email?.trim() ? email.trim() : undefined,
         phone: phone?.trim() ? phone.trim() : undefined,
