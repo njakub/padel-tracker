@@ -22,6 +22,19 @@ export type StandingsResponse = {
     endDate: Date | null;
   } | null;
   rows: StandingRow[];
+  teamRows: TeamStandingRow[];
+};
+
+export type TeamStandingRow = {
+  teamKey: string;
+  teamName: string;
+  matchesPlayed: number;
+  wins: number;
+  losses: number;
+  points: number;
+  gamesWon: number;
+  gamesLost: number;
+  gameDifferential: number;
 };
 
 export async function getStandings(params?: {
@@ -42,7 +55,7 @@ export async function getStandings(params?: {
       });
 
   if (!season) {
-    return { season: null, rows: [] };
+    return { season: null, rows: [], teamRows: [] };
   }
 
   const matches = await prisma.match.findMany({
@@ -60,6 +73,7 @@ export async function getStandings(params?: {
   });
 
   const table = new Map<string, StandingRow>();
+  const teamTable = new Map<string, TeamStandingRow>();
 
   const ensureRow = (
     playerId: string | null | undefined,
@@ -80,6 +94,39 @@ export async function getStandings(params?: {
       });
     }
     return table.get(playerId)!;
+  };
+
+  const ensureTeamRow = (
+    members: { id: string; name?: string | null }[]
+  ) => {
+    if (members.length < 2) {
+      return undefined;
+    }
+
+    const sorted = [...members].sort((a, b) => a.id.localeCompare(b.id));
+    const key = sorted.map((player) => player.id).join("|");
+
+    if (!key) return undefined;
+
+    if (!teamTable.has(key)) {
+      const name = sorted
+        .map((player) => player.name ?? "Unknown")
+        .join(" & ");
+
+      teamTable.set(key, {
+        teamKey: key,
+        teamName: name,
+        matchesPlayed: 0,
+        wins: 0,
+        losses: 0,
+        points: 0,
+        gamesWon: 0,
+        gamesLost: 0,
+        gameDifferential: 0,
+      });
+    }
+
+    return teamTable.get(key)!;
   };
 
   matches.forEach((match) => {
@@ -107,6 +154,9 @@ export async function getStandings(params?: {
 
     const team1Games = match.team1Sets ?? 0;
     const team2Games = match.team2Sets ?? 0;
+
+    const team1Row = ensureTeamRow(team1);
+    const team2Row = ensureTeamRow(team2);
 
     team1.forEach(({ id, name }) => {
       const row = ensureRow(id, name ?? undefined);
@@ -139,6 +189,34 @@ export async function getStandings(params?: {
         row.losses += 1;
       }
     });
+
+    if (team1Row) {
+      team1Row.matchesPlayed += 1;
+      team1Row.gamesWon += team1Games;
+      team1Row.gamesLost += team2Games;
+      team1Row.points += team1Games;
+      team1Row.gameDifferential = team1Row.gamesWon - team1Row.gamesLost;
+      if (match.winnerSide === MatchSide.TEAM1) {
+        team1Row.wins += 1;
+        team1Row.points += 1;
+      } else if (match.winnerSide === MatchSide.TEAM2) {
+        team1Row.losses += 1;
+      }
+    }
+
+    if (team2Row) {
+      team2Row.matchesPlayed += 1;
+      team2Row.gamesWon += team2Games;
+      team2Row.gamesLost += team1Games;
+      team2Row.points += team2Games;
+      team2Row.gameDifferential = team2Row.gamesWon - team2Row.gamesLost;
+      if (match.winnerSide === MatchSide.TEAM2) {
+        team2Row.wins += 1;
+        team2Row.points += 1;
+      } else if (match.winnerSide === MatchSide.TEAM1) {
+        team2Row.losses += 1;
+      }
+    }
   });
 
   const rows = Array.from(table.values())
@@ -155,6 +233,18 @@ export async function getStandings(params?: {
       return a.playerName.localeCompare(b.playerName);
     });
 
+  const teamRows = Array.from(teamTable.values())
+    .map((row) => ({ ...row }))
+    .sort((a, b) => {
+      if (b.points !== a.points) return b.points - a.points;
+      if (b.wins !== a.wins) return b.wins - a.wins;
+      if (b.gamesWon !== a.gamesWon) return b.gamesWon - a.gamesWon;
+      if (b.gameDifferential !== a.gameDifferential) {
+        return b.gameDifferential - a.gameDifferential;
+      }
+      return a.teamName.localeCompare(b.teamName);
+    });
+
   return {
     season: {
       id: season.id,
@@ -163,5 +253,6 @@ export async function getStandings(params?: {
       endDate: season.endDate,
     },
     rows,
+    teamRows,
   };
 }

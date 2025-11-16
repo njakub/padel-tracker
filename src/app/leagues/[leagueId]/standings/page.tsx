@@ -41,7 +41,7 @@ export default async function LeagueStandingsPage({
     notFound();
   }
 
-  const { season, rows } = await getStandings({ leagueId });
+  const { season, rows, teamRows } = await getStandings({ leagueId });
 
   if (!season) {
     return (
@@ -124,6 +124,68 @@ export default async function LeagueStandingsPage({
                     <TableCell className="text-right">
                       {row.gamesLost}
                     </TableCell>
+                    <TableCell className="text-right">
+                      {row.gameDifferential >= 0 ? "+" : ""}
+                      {row.gameDifferential}
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base font-semibold">
+            Most Effective Pairings
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="overflow-x-auto px-2 pb-4">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-12 text-left">#</TableHead>
+                <TableHead>Pairing</TableHead>
+                <TableHead className="text-right">Pts</TableHead>
+                <TableHead className="text-right">W</TableHead>
+                <TableHead className="text-right">L</TableHead>
+                <TableHead className="text-right">MP</TableHead>
+                <TableHead className="text-right">Games +</TableHead>
+                <TableHead className="text-right">Games -</TableHead>
+                <TableHead className="text-right">Diff</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {teamRows.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={9}
+                    className="text-center text-sm text-muted-foreground"
+                  >
+                    No completed doubles matches yet.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                teamRows.map((row, index) => (
+                  <TableRow key={row.teamKey}>
+                    <TableCell className="text-left font-medium">
+                      {index + 1}
+                    </TableCell>
+                    <TableCell className="font-medium">
+                      {row.teamName}
+                    </TableCell>
+                    <TableCell className="text-right font-semibold">
+                      {row.points}
+                    </TableCell>
+                    <TableCell className="text-right">{row.wins}</TableCell>
+                    <TableCell className="text-right">{row.losses}</TableCell>
+                    <TableCell className="text-right">
+                      {row.matchesPlayed}
+                    </TableCell>
+                    <TableCell className="text-right">{row.gamesWon}</TableCell>
+                    <TableCell className="text-right">{row.gamesLost}</TableCell>
                     <TableCell className="text-right">
                       {row.gameDifferential >= 0 ? "+" : ""}
                       {row.gameDifferential}

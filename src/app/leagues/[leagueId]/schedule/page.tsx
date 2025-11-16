@@ -165,13 +165,13 @@ export default async function LeagueSchedulePage({
             <TableHeader>
               <TableRow>
                 <TableHead>#</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Court</TableHead>
                 <TableHead>Team 1</TableHead>
                 <TableHead>Team 2</TableHead>
                 <TableHead>Sit out</TableHead>
-                <TableHead>Status</TableHead>
                 <TableHead>Result</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead>Court</TableHead>
                 <TableHead className="whitespace-normal">Notes</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
@@ -194,22 +194,9 @@ export default async function LeagueSchedulePage({
                 return (
                   <TableRow key={match.id}>
                     <TableCell className="font-medium">{matchNumber}</TableCell>
-                    <TableCell>
-                      {isCompleted && match.date
-                        ? formatMatchDate(match.date)
-                        : "—"}
-                    </TableCell>
-                    <TableCell>
-                      {isCompleted && match.court ? match.court : "—"}
-                    </TableCell>
                     <TableCell>{team1}</TableCell>
                     <TableCell>{team2}</TableCell>
                     <TableCell>{match.sitOutPlayer?.name ?? "—"}</TableCell>
-                    <TableCell>
-                      <Badge variant={isCompleted ? "secondary" : "outline"}>
-                        {statusLabel(match.status)}
-                      </Badge>
-                    </TableCell>
                     <TableCell>
                       {isCompleted ? (
                         <div className="flex flex-col">
@@ -221,6 +208,19 @@ export default async function LeagueSchedulePage({
                       ) : (
                         <span className="text-muted-foreground">—</span>
                       )}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={isCompleted ? "secondary" : "outline"}>
+                        {statusLabel(match.status)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {isCompleted && match.date
+                        ? formatMatchDate(match.date)
+                        : "—"}
+                    </TableCell>
+                    <TableCell>
+                      {isCompleted && match.court ? match.court : "—"}
                     </TableCell>
                     <TableCell className="whitespace-normal">
                       {match.notes ?? "—"}
