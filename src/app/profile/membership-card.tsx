@@ -150,9 +150,7 @@ function MembershipCardInner({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base font-semibold">
-          {league.name}
-        </CardTitle>
+        <CardTitle className="text-base font-semibold">{league.name}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
