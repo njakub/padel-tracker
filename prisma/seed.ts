@@ -2,7 +2,7 @@ import { PrismaClient, SkillTier } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-const schedule = [
+const baseFixtures = [
   {
     matchNumber: 1,
     sitOut: "Matt",
@@ -95,6 +95,22 @@ const schedule = [
   },
 ] as const;
 
+const totalRounds = 2;
+
+type Fixture = {
+  matchNumber: number;
+  sitOut: string;
+  team1: readonly [string, string];
+  team2: readonly [string, string];
+};
+
+const schedule: Fixture[] = Array.from({ length: totalRounds }, (_, round) =>
+  baseFixtures.map((fixture) => ({
+    ...fixture,
+    matchNumber: fixture.matchNumber + round * baseFixtures.length,
+  }))
+).flat();
+
 async function main() {
   const league = await prisma.league.findFirst({
     where: { name: "Magabull Padel" },
@@ -156,15 +172,25 @@ async function main() {
     },
   });
 
-  await prisma.matchSet.deleteMany({
-    where: { match: { seasonId: season.id } },
-  });
-  await prisma.match.deleteMany({ where: { seasonId: season.id } });
-
   const startDate = new Date("2025-01-06T18:00:00.000Z");
   const courtNames = ["Center Court", "Court 1", "Court 2"];
 
+  const existingMatches = await prisma.match.findMany({
+    where: { seasonId: season.id },
+    select: { matchNumber: true },
+  });
+
+  const existingMatchNumbers = new Set(
+    existingMatches
+      .map((match) => match.matchNumber)
+      .filter((num): num is number => typeof num === "number")
+  );
+
   for (const entry of schedule) {
+    if (existingMatchNumbers.has(entry.matchNumber)) {
+      continue;
+    }
+
     const matchDate = new Date(startDate);
     matchDate.setDate(startDate.getDate() + (entry.matchNumber - 1) * 7);
 

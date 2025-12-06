@@ -185,7 +185,9 @@ export default async function LeagueStandingsPage({
                       {row.matchesPlayed}
                     </TableCell>
                     <TableCell className="text-right">{row.gamesWon}</TableCell>
-                    <TableCell className="text-right">{row.gamesLost}</TableCell>
+                    <TableCell className="text-right">
+                      {row.gamesLost}
+                    </TableCell>
                     <TableCell className="text-right">
                       {row.gameDifferential >= 0 ? "+" : ""}
                       {row.gameDifferential}

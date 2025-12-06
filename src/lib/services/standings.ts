@@ -96,9 +96,7 @@ export async function getStandings(params?: {
     return table.get(playerId)!;
   };
 
-  const ensureTeamRow = (
-    members: { id: string; name?: string | null }[]
-  ) => {
+  const ensureTeamRow = (members: { id: string; name?: string | null }[]) => {
     if (members.length < 2) {
       return undefined;
     }
@@ -109,9 +107,7 @@ export async function getStandings(params?: {
     if (!key) return undefined;
 
     if (!teamTable.has(key)) {
-      const name = sorted
-        .map((player) => player.name ?? "Unknown")
-        .join(" & ");
+      const name = sorted.map((player) => player.name ?? "Unknown").join(" & ");
 
       teamTable.set(key, {
         teamKey: key,
