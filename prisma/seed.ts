@@ -95,7 +95,7 @@ const baseFixtures = [
   },
 ] as const;
 
-const totalRounds = 2;
+const totalRounds = 3;
 
 type Fixture = {
   matchNumber: number;
