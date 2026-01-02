@@ -90,6 +90,7 @@ export function MatchResultForm({
             </option>
             <option value="The Atrium">The Atrium</option>
             <option value="PadelStars Reading">PadelStars Reading</option>
+            <option value="PadelStars Bracknell">PadelStars Bracknell</option>
           </select>
         </div>
       </div>
@@ -131,20 +132,6 @@ export function MatchResultForm({
             required
           />
         </div>
-      </div>
-
-      <div className="space-y-1">
-        <Label htmlFor="winnerSide">Winner</Label>
-        <select
-          id="winnerSide"
-          name="winnerSide"
-          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
-          defaultValue="TEAM1"
-          required
-        >
-          <option value="TEAM1">Team 1</option>
-          <option value="TEAM2">Team 2</option>
-        </select>
       </div>
 
       <div className="space-y-1">

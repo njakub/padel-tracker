@@ -6,13 +6,31 @@ import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
 import { requireLeagueRole } from "@/lib/server/league-auth";
+import { generatePartnerBalanced5PlayerDoublesFixtures } from "@/lib/services/fixture-generator";
 
 const seasonSchema = z.object({
   leagueId: z.string().min(1),
   name: z.string().trim().min(1, "Season name is required").max(100),
-  startDate: z.coerce.date({ message: "Start date is required" }),
-  endDate: z.coerce.date().optional(),
+  startDate: z.preprocess((v) => {
+    if (typeof v === "string") {
+      const trimmed = v.trim();
+      if (!trimmed) return undefined;
+      return new Date(trimmed);
+    }
+    return v;
+  }, z.date({ message: "Start date is required" })),
+  endDate: z.preprocess((v) => {
+    if (typeof v === "string") {
+      const trimmed = v.trim();
+      if (!trimmed) return undefined;
+      return new Date(trimmed);
+    }
+    return v;
+  }, z.date().optional()),
   description: z.string().trim().max(500).optional(),
+  generateSchedule: z.coerce.boolean().optional(),
+  scheduleType: z.enum(["PARTNER_BALANCED_5P"]).optional(),
+  seasonLengthMatches: z.coerce.number().int().positive().optional(),
 });
 
 function revalidateLeagueSeasonViews(leagueId: string) {
@@ -29,6 +47,10 @@ export async function createSeason(formData: FormData) {
     startDate: formData.get("startDate")?.toString() ?? "",
     endDate: formData.get("endDate")?.toString() ?? undefined,
     description: formData.get("description")?.toString() ?? undefined,
+    generateSchedule: formData.get("generateSchedule")?.toString() ?? undefined,
+    scheduleType: formData.get("scheduleType")?.toString() ?? undefined,
+    seasonLengthMatches:
+      formData.get("seasonLengthMatches")?.toString() ?? undefined,
   });
 
   if (!parsed.success) {
@@ -36,6 +58,8 @@ export async function createSeason(formData: FormData) {
   }
 
   const data = parsed.data;
+
+  const allowedLengths = [5, 10, 15, 20, 25, 30, 35, 40, 45];
 
   await requireLeagueRole(data.leagueId, LeagueRole.ADMIN);
 
@@ -45,7 +69,7 @@ export async function createSeason(formData: FormData) {
       data: { isActive: false },
     });
 
-    await tx.season.create({
+    const createdSeason = await tx.season.create({
       data: {
         leagueId: data.leagueId,
         name: data.name,
@@ -54,6 +78,77 @@ export async function createSeason(formData: FormData) {
         description: data.description,
         isActive: true,
       },
+    });
+
+    // FormData booleans are tricky; treat "on"/"true" as true.
+    const generateSchedule =
+      formData.get("generateSchedule")?.toString() === "on" ||
+      formData.get("generateSchedule")?.toString() === "true";
+
+    if (!generateSchedule) {
+      return;
+    }
+
+    if (data.scheduleType !== "PARTNER_BALANCED_5P") {
+      throw new Error("Unsupported schedule type");
+    }
+
+    const seasonLengthMatches = data.seasonLengthMatches ?? 30;
+    if (!allowedLengths.includes(seasonLengthMatches)) {
+      throw new Error(
+        `Season length must be one of: ${allowedLengths.join(", ")}`
+      );
+    }
+
+    const leaguePlayers = await tx.player.findMany({
+      where: { leagueId: data.leagueId },
+      orderBy: { name: "asc" },
+      select: { id: true },
+      take: 5,
+    });
+
+    if (leaguePlayers.length !== 5) {
+      throw new Error(
+        `Schedule generation requires exactly 5 players in the league (found ${leaguePlayers.length}).`
+      );
+    }
+
+    const playerIds = leaguePlayers.map((p) => p.id) as [
+      string,
+      string,
+      string,
+      string,
+      string
+    ];
+
+    const fixtures = generatePartnerBalanced5PlayerDoublesFixtures({
+      playerIds,
+      seasonLengthMatches,
+    });
+
+    const courtNames = ["Center Court", "Court 1", "Court 2"];
+
+    await tx.match.createMany({
+      data: fixtures.map((fixture) => {
+        const matchDate = new Date(data.startDate);
+        matchDate.setDate(
+          data.startDate.getDate() + (fixture.matchNumber - 1) * 7
+        );
+
+        return {
+          seasonId: createdSeason.id,
+          matchNumber: fixture.matchNumber,
+          date: matchDate,
+          court: courtNames[(fixture.matchNumber - 1) % courtNames.length],
+          isDoubles: true,
+          sitOutPlayerId: fixture.sitOut,
+          player1Id: fixture.team1[0],
+          player2Id: fixture.team1[1],
+          player3Id: fixture.team2[0],
+          player4Id: fixture.team2[1],
+          status: fixture.matchNumber === 1 ? "SCHEDULED" : "SCHEDULED",
+        };
+      }),
     });
   });
 

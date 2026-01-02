@@ -1,17 +1,15 @@
-import { MatchSide } from "@prisma/client";
 import { z } from "zod";
 
 const playerId = z.string().min(1, "Player is required");
 
 const matchResultBaseSchema = z.object({
-  winnerSide: z.nativeEnum(MatchSide),
   team1Sets: z.number().int().min(0).max(5),
   team2Sets: z.number().int().min(0).max(5),
   notes: z.string().trim().max(500).optional(),
 });
 
 function validateMatchResultSets(
-  data: { winnerSide: MatchSide; team1Sets: number; team2Sets: number },
+  data: { team1Sets: number; team2Sets: number },
   ctx: z.RefinementCtx
 ) {
   if (data.team1Sets === data.team2Sets) {
@@ -19,23 +17,6 @@ function validateMatchResultSets(
       code: z.ZodIssueCode.custom,
       message: "Sets cannot tie",
       path: ["team1Sets"],
-    });
-    return;
-  }
-
-  if (data.winnerSide === MatchSide.TEAM1 && data.team1Sets <= data.team2Sets) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Team 1 must have more sets than Team 2",
-      path: ["team1Sets"],
-    });
-  }
-
-  if (data.winnerSide === MatchSide.TEAM2 && data.team2Sets <= data.team1Sets) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Team 2 must have more sets than Team 1",
-      path: ["team2Sets"],
     });
   }
 }
@@ -79,39 +60,26 @@ export const matchUpdateSchema = matchCreateSchema
     matchId: z.string().min(1, "Match is required"),
     team1Sets: z.number().int().min(0).max(5).optional(),
     team2Sets: z.number().int().min(0).max(5).optional(),
-    winnerSide: z.nativeEnum(MatchSide).optional(),
   })
   .superRefine((data, ctx) => {
     const team1Sets = data.team1Sets;
     const team2Sets = data.team2Sets;
-    const winnerSide = data.winnerSide;
 
     const hasTeam1Sets = typeof team1Sets === "number";
     const hasTeam2Sets = typeof team2Sets === "number";
-    const hasWinner = Boolean(winnerSide);
 
-    if (hasWinner && (!hasTeam1Sets || !hasTeam2Sets)) {
+    if (hasTeam1Sets !== hasTeam2Sets) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Provide both scores when selecting a winner",
+        message: "Provide both scores or neither",
         path: ["team1Sets"],
       });
       return;
     }
 
-    if ((hasTeam1Sets || hasTeam2Sets) && !hasWinner) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Select the winning team",
-        path: ["winnerSide"],
-      });
-      return;
-    }
-
-    if (hasTeam1Sets && hasTeam2Sets && hasWinner) {
+    if (hasTeam1Sets && hasTeam2Sets) {
       validateMatchResultSets(
         {
-          winnerSide: winnerSide!,
           team1Sets,
           team2Sets,
         },

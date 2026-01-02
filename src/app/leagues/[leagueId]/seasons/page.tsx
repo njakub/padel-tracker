@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { canManageLeague } from "@/lib/server/league-auth";
@@ -79,6 +80,11 @@ export default async function LeagueSeasonsPage({ params }: SeasonsPageProps) {
           <CardContent>
             <form action={createSeason} className="grid gap-4 sm:grid-cols-2">
               <input type="hidden" name="leagueId" value={leagueId} />
+              <input
+                type="hidden"
+                name="scheduleType"
+                value="PARTNER_BALANCED_5P"
+              />
               <div className="space-y-2">
                 <Label htmlFor="season-name">Name</Label>
                 <Input id="season-name" name="name" required />
@@ -91,6 +97,50 @@ export default async function LeagueSeasonsPage({ params }: SeasonsPageProps) {
                   type="date"
                   required
                 />
+              </div>
+              <div className="space-y-2 sm:col-span-2">
+                <Label>Auto-generate schedule</Label>
+                <div className="flex flex-col gap-3 rounded-xl border border-border/60 p-3">
+                  <div className="flex items-start gap-3">
+                    <Checkbox
+                      id="generate-schedule"
+                      name="generateSchedule"
+                      defaultChecked
+                    />
+                    <div className="space-y-1">
+                      <Label
+                        htmlFor="generate-schedule"
+                        className="cursor-pointer"
+                      >
+                        Create a partner-balanced schedule (5 players)
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        Every player pairing will be teammates an equal number
+                        of times. Requires the league to have exactly 5 players.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="season-length">
+                        Season length (matches)
+                      </Label>
+                      <select
+                        id="season-length"
+                        name="seasonLengthMatches"
+                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        defaultValue="30"
+                      >
+                        {[5, 10, 15, 20, 25, 30, 35, 40, 45].map((len) => (
+                          <option key={len} value={len}>
+                            {len} matches (each pair together {len / 5}×)
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="season-end">End date</Label>

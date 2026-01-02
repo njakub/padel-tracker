@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { getStandings } from "@/lib/services/standings";
@@ -25,12 +26,17 @@ function formatDateRange(startDate: Date, endDate?: Date | null) {
 
 type StandingsPageProps = {
   params: Promise<{ leagueId: string }>;
+  searchParams?: Promise<{ season?: string }>;
 };
 
 export default async function LeagueStandingsPage({
   params,
+  searchParams,
 }: StandingsPageProps) {
-  const { leagueId } = await params;
+  const [{ leagueId }, resolvedSearchParams] = await Promise.all([
+    params,
+    searchParams ?? Promise.resolve({}),
+  ]);
 
   const leagueExists = await prisma.league.findUnique({
     where: { id: leagueId },
@@ -41,7 +47,31 @@ export default async function LeagueStandingsPage({
     notFound();
   }
 
-  const { season, rows, teamRows } = await getStandings({ leagueId });
+  const seasons = await prisma.season.findMany({
+    where: { leagueId },
+    orderBy: { startDate: "desc" },
+    select: {
+      id: true,
+      name: true,
+      startDate: true,
+      endDate: true,
+      isAdhoc: true,
+      isActive: true,
+    },
+  });
+
+  const requestedSeasonId = (
+    resolvedSearchParams as { season?: string } | undefined
+  )?.season;
+  const selectedSeason =
+    seasons.find((s) => s.id === requestedSeasonId) ??
+    seasons.find((s) => s.isActive) ??
+    seasons[0] ??
+    null;
+
+  const { season, rows, teamRows } = selectedSeason
+    ? await getStandings({ seasonId: selectedSeason.id })
+    : { season: null, rows: [], teamRows: [] };
 
   if (!season) {
     return (
@@ -51,7 +81,7 @@ export default async function LeagueStandingsPage({
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
-            No active season found. Create a season and add a match to get
+            No seasons found. Create a season or log an ad-hoc game to get
             started.
           </p>
         </CardContent>
@@ -66,6 +96,32 @@ export default async function LeagueStandingsPage({
         <p className="text-sm text-muted-foreground">
           {season.name} · {formatDateRange(season.startDate, season.endDate)}
         </p>
+        {seasons.length > 1 ? (
+          <div className="mt-3 flex flex-wrap gap-2 text-xs">
+            {seasons.map((s) => {
+              const isSelected = s.id === season.id;
+              return (
+                <Link
+                  key={s.id}
+                  href={`/leagues/${leagueId}/standings?season=${s.id}`}
+                  className={`rounded-full border px-3 py-1 transition ${
+                    isSelected
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-muted text-foreground hover:border-primary"
+                  }`}
+                >
+                  <span className="font-medium">{s.name}</span>
+                  {s.isAdhoc ? (
+                    <span className="ml-2 text-[11px] uppercase">Ad-hoc</span>
+                  ) : null}
+                  {s.isActive && !s.isAdhoc ? (
+                    <span className="ml-2 text-[11px] uppercase">Active</span>
+                  ) : null}
+                </Link>
+              );
+            })}
+          </div>
+        ) : null}
       </div>
       <p className="text-xs text-muted-foreground">
         Scoring: +1 point for every game won, plus an extra +1 for each match

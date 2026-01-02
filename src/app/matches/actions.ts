@@ -1,6 +1,6 @@
 "use server";
 
-import { MatchStatus } from "@prisma/client";
+import { MatchSide, MatchStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
 import { prisma } from "@/lib/prisma";
@@ -131,7 +131,6 @@ function parseMatchCreateForm(formData: FormData): MatchCreateInput {
 function parseMatchResultForm(formData: FormData): MatchResultWithMatchInput {
   const payload = {
     matchId: formData.get("matchId")?.toString() ?? "",
-    winnerSide: formData.get("winnerSide")?.toString(),
     team1Sets: Number(formData.get("team1Sets") ?? 0),
     team2Sets: Number(formData.get("team2Sets") ?? 0),
     notes: formData.get("notes")?.toString() || undefined,
@@ -156,7 +155,6 @@ function parseMatchUpdateForm(formData: FormData): MatchUpdateInput {
   const notes = formData.get("notes")?.toString() ?? "";
   const team1SetsRaw = formData.get("team1Sets")?.toString() ?? "";
   const team2SetsRaw = formData.get("team2Sets")?.toString() ?? "";
-  const winnerSideRaw = formData.get("winnerSide")?.toString() ?? "";
 
   const payload = {
     matchId: formData.get("matchId")?.toString() ?? "",
@@ -167,7 +165,6 @@ function parseMatchUpdateForm(formData: FormData): MatchUpdateInput {
     notes: notes || undefined,
     team1Sets: team1SetsRaw ? Number(team1SetsRaw) : undefined,
     team2Sets: team2SetsRaw ? Number(team2SetsRaw) : undefined,
-    winnerSide: winnerSideRaw || undefined,
     team1PlayerIds: [
       formData.get("team1Player1")?.toString() ?? "",
       formData.get("team1Player2")?.toString() ?? "",
@@ -240,15 +237,7 @@ export async function createMatch(formData: FormData) {
 export async function recordMatchResult(formData: FormData) {
   try {
     const data = parseMatchResultForm(formData);
-    const {
-      matchId,
-      winnerSide,
-      team1Sets,
-      team2Sets,
-      notes,
-      playedAt,
-      court,
-    } = data;
+    const { matchId, team1Sets, team2Sets, notes, playedAt, court } = data;
 
     const match = await prisma.match.findUnique({
       where: { id: matchId },
@@ -260,6 +249,8 @@ export async function recordMatchResult(formData: FormData) {
     }
 
     const leagueId = await requireAdminForSeason(match.seasonId);
+    const winnerSide =
+      team1Sets > team2Sets ? MatchSide.TEAM1 : MatchSide.TEAM2;
 
     await prisma.match.update({
       where: { id: matchId },
@@ -347,12 +338,25 @@ export async function updateMatch(formData: FormData) {
         player3Id: team2Player1,
         player4Id: team2Player2,
         sitOutPlayerId: data.sitOutPlayerId ?? null,
-        winnerSide: data.winnerSide ?? null,
+        winnerSide:
+          typeof data.team1Sets === "number" &&
+          typeof data.team2Sets === "number"
+            ? data.team1Sets === data.team2Sets
+              ? null
+              : data.team1Sets > data.team2Sets
+              ? MatchSide.TEAM1
+              : MatchSide.TEAM2
+            : null,
         team1Sets:
           typeof data.team1Sets === "number" ? data.team1Sets : undefined,
         team2Sets:
           typeof data.team2Sets === "number" ? data.team2Sets : undefined,
-        status: data.winnerSide ? MatchStatus.COMPLETED : undefined,
+        status:
+          typeof data.team1Sets === "number" &&
+          typeof data.team2Sets === "number" &&
+          data.team1Sets !== data.team2Sets
+            ? MatchStatus.COMPLETED
+            : undefined,
       },
     });
 

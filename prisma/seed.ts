@@ -155,7 +155,7 @@ async function main() {
   }
 
   const season = await prisma.season.upsert({
-    where: { name: "Season 1" },
+    where: { leagueId_name: { leagueId: league.id, name: "Season 1" } },
     update: {
       isActive: true,
       endDate: null,
@@ -225,6 +225,40 @@ async function main() {
         player3Id: team2PlayerA,
         player4Id: team2PlayerB,
         status: entry.matchNumber === 1 ? "SCHEDULED" : undefined,
+      },
+    });
+  }
+
+  // Ensure admin membership for bootstrap user and the provided owner email
+  const adminEmails = Array.from(
+    new Set(
+      [process.env.ADMIN_EMAIL, "njakub94@gmail.com"].filter(
+        (email): email is string => Boolean(email)
+      )
+    )
+  );
+
+  for (const email of adminEmails) {
+    const adminUser = await prisma.user.findUnique({ where: { email } });
+    if (!adminUser) {
+      console.warn(
+        `Admin user ${email} not found; skipping membership creation.`
+      );
+      continue;
+    }
+
+    await prisma.leagueMembership.upsert({
+      where: {
+        leagueId_userId: {
+          leagueId: league.id,
+          userId: adminUser.id,
+        },
+      },
+      update: { role: "OWNER" },
+      create: {
+        leagueId: league.id,
+        userId: adminUser.id,
+        role: "OWNER",
       },
     });
   }

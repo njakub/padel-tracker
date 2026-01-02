@@ -8,7 +8,8 @@ import { auth } from "@/lib/auth";
 
 import { canManageLeague } from "@/lib/server/league-auth";
 
-import { removeMatchResult } from "./actions";
+import { deleteMatch, removeMatchResult } from "./actions";
+import { AdhocMatchForm } from "./adhoc-match-form";
 import { MatchResultForm } from "./match-result-form";
 
 function toDateTimeLocalValue(date: Date) {
@@ -47,7 +48,7 @@ export default async function LeagueMatchesPage({ params }: MatchesPageProps) {
   const session = await auth();
   const userId = session?.user?.id ?? null;
 
-  const [membership, season] = await Promise.all([
+  const [membership, season, adhocSeason, players] = await Promise.all([
     userId
       ? prisma.leagueMembership.findUnique({
           where: { leagueId_userId: { leagueId, userId } },
@@ -58,34 +59,44 @@ export default async function LeagueMatchesPage({ params }: MatchesPageProps) {
       where: { leagueId, isActive: true },
       orderBy: { startDate: "desc" },
     }),
+    prisma.season.findFirst({
+      where: { leagueId, isAdhoc: true },
+      select: { id: true, name: true },
+    }),
+    prisma.player.findMany({
+      where: { leagueId },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
   ]);
 
-  if (!season) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Matches</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            No active season found. Create a season before adding matches.
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  const matches = await prisma.match.findMany({
-    where: { seasonId: season.id },
-    include: {
-      player1: { select: { id: true, name: true } },
-      player2: { select: { id: true, name: true } },
-      player3: { select: { id: true, name: true } },
-      player4: { select: { id: true, name: true } },
-      sitOutPlayer: { select: { id: true, name: true } },
-    },
-    orderBy: [{ status: "asc" }, { matchNumber: "asc" }],
-  });
+  const [matches, adhocMatches] = await Promise.all([
+    season
+      ? prisma.match.findMany({
+          where: { seasonId: season.id },
+          include: {
+            player1: { select: { id: true, name: true } },
+            player2: { select: { id: true, name: true } },
+            player3: { select: { id: true, name: true } },
+            player4: { select: { id: true, name: true } },
+            sitOutPlayer: { select: { id: true, name: true } },
+          },
+          orderBy: [{ status: "asc" }, { matchNumber: "asc" }],
+        })
+      : Promise.resolve([]),
+    adhocSeason
+      ? prisma.match.findMany({
+          where: { seasonId: adhocSeason.id },
+          include: {
+            player1: { select: { id: true, name: true } },
+            player2: { select: { id: true, name: true } },
+            player3: { select: { id: true, name: true } },
+            player4: { select: { id: true, name: true } },
+          },
+          orderBy: [{ completedAt: "desc" }, { createdAt: "desc" }],
+        })
+      : Promise.resolve([]),
+  ]);
 
   const isLeagueManager = canManageLeague(
     membership?.role ?? null,
@@ -93,17 +104,21 @@ export default async function LeagueMatchesPage({ params }: MatchesPageProps) {
     LeagueRole.ADMIN
   );
 
-  const scheduledMatches = matches
-    .filter((match) => match.status !== MatchStatus.COMPLETED)
-    .sort(
-      (a, b) =>
-        (a.matchNumber ?? Number.MAX_SAFE_INTEGER) -
-        (b.matchNumber ?? Number.MAX_SAFE_INTEGER)
-    );
+  const scheduledMatches = season
+    ? matches
+        .filter((match) => match.status !== MatchStatus.COMPLETED)
+        .sort(
+          (a, b) =>
+            (a.matchNumber ?? Number.MAX_SAFE_INTEGER) -
+            (b.matchNumber ?? Number.MAX_SAFE_INTEGER)
+        )
+    : [];
 
-  const completedMatches = matches
-    .filter((match) => match.status === MatchStatus.COMPLETED)
-    .sort((a, b) => (b.matchNumber ?? 0) - (a.matchNumber ?? 0));
+  const completedMatches = season
+    ? matches
+        .filter((match) => match.status === MatchStatus.COMPLETED)
+        .sort((a, b) => (b.matchNumber ?? 0) - (a.matchNumber ?? 0))
+    : [];
 
   const defaultDateValue = toDateTimeLocalValue(new Date());
   const matchOptions = scheduledMatches.map((match) => {
@@ -123,30 +138,61 @@ export default async function LeagueMatchesPage({ params }: MatchesPageProps) {
       <div>
         <h2 className="text-xl font-semibold">Matches</h2>
         <p className="text-sm text-muted-foreground">
-          Manage fixtures and record results for {season.name}
+          {season
+            ? `Manage fixtures and record results for ${season.name}`
+            : "No active season found. You can still log ad-hoc games."}
         </p>
       </div>
+
+      {season ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base font-semibold">
+              Log a Result
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {scheduledMatches.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                All scheduled matches are up to date. Create a new match or
+                reopen one to log a result.
+              </p>
+            ) : isLeagueManager ? (
+              <MatchResultForm
+                matches={matchOptions}
+                defaultDateValue={defaultDateValue}
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Admin access is required to record match results.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>
           <CardTitle className="text-base font-semibold">
-            Log a Result
+            Log an Ad-hoc Game
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {scheduledMatches.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              All scheduled matches are up to date. Create a new match or reopen
-              one to log a result.
-            </p>
-          ) : isLeagueManager ? (
-            <MatchResultForm
-              matches={matchOptions}
-              defaultDateValue={defaultDateValue}
-            />
+          {isLeagueManager ? (
+            players.length >= 4 ? (
+              <AdhocMatchForm
+                leagueId={leagueId}
+                players={players}
+                defaultDateValue={defaultDateValue}
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Need at least 4 players in the league to record an ad-hoc game.
+              </p>
+            )
           ) : (
             <p className="text-sm text-muted-foreground">
-              Admin access is required to record match results.
+              Admin access is required to record ad-hoc games.
             </p>
           )}
         </CardContent>
@@ -157,7 +203,9 @@ export default async function LeagueMatchesPage({ params }: MatchesPageProps) {
         {completedMatches.length === 0 ? (
           <Card>
             <CardContent className="py-6 text-sm text-muted-foreground">
-              No completed matches yet.
+              {season
+                ? "No completed matches yet."
+                : "No active season. Scheduled matches will appear here when available."}
             </CardContent>
           </Card>
         ) : (
@@ -206,11 +254,88 @@ export default async function LeagueMatchesPage({ params }: MatchesPageProps) {
                       </p>
                     ) : null}
                     {isLeagueManager ? (
-                      <form action={removeMatchResult.bind(null, match.id)}>
-                        <Button type="submit" variant="destructive" size="sm">
-                          Remove result
-                        </Button>
-                      </form>
+                      <div className="flex flex-wrap gap-2">
+                        <form action={removeMatchResult.bind(null, match.id)}>
+                          <Button type="submit" variant="secondary" size="sm">
+                            Remove result
+                          </Button>
+                        </form>
+                        <form action={deleteMatch.bind(null, match.id)}>
+                          <Button type="submit" variant="destructive" size="sm">
+                            Delete match
+                          </Button>
+                        </form>
+                      </div>
+                    ) : null}
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-4">
+        <h3 className="text-lg font-semibold">Ad-hoc Games</h3>
+        {adhocMatches.length === 0 ? (
+          <Card>
+            <CardContent className="py-6 text-sm text-muted-foreground">
+              No ad-hoc games recorded yet.
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-4">
+            {adhocMatches.map((match, index) => {
+              const team1 =
+                formatTeam([match.player1, match.player2]) || "Team 1";
+              const team2 =
+                formatTeam([match.player3, match.player4]) || "Team 2";
+              const winnerName =
+                match.winnerSide === MatchSide.TEAM1
+                  ? team1
+                  : match.winnerSide === MatchSide.TEAM2
+                  ? team2
+                  : null;
+
+              return (
+                <Card key={match.id}>
+                  <CardHeader className="space-y-2">
+                    <div className="flex items-center justify-between text-sm text-muted-foreground">
+                      <span>Ad-hoc #{match.matchNumber ?? index + 1}</span>
+                      <span>{formatMatchDate(match.date)}</span>
+                    </div>
+                    <CardTitle className="text-lg">
+                      {team1} vs {team2}
+                    </CardTitle>
+                    <div className="flex items-center gap-2 text-sm">
+                      <Badge variant="secondary">
+                        Winner: {winnerName ?? "Pending"}
+                      </Badge>
+                      <span className="text-muted-foreground">
+                        {match.team1Sets} - {match.team2Sets}
+                      </span>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {match.court ? (
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Court</span>
+                        <span>{match.court}</span>
+                      </div>
+                    ) : null}
+                    {match.notes ? (
+                      <p className="text-sm text-muted-foreground">
+                        {match.notes}
+                      </p>
+                    ) : null}
+                    {isLeagueManager ? (
+                      <div className="flex flex-wrap gap-2">
+                        <form action={deleteMatch.bind(null, match.id)}>
+                          <Button type="submit" variant="destructive" size="sm">
+                            Delete ad-hoc game
+                          </Button>
+                        </form>
+                      </div>
                     ) : null}
                   </CardContent>
                 </Card>

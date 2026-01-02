@@ -105,6 +105,11 @@ export default async function LeaguesPage() {
                       </Link>
                     </Button>
                     <Button asChild size="sm" variant="outline">
+                      <Link href={`/leagues/${league.id}/seasons`}>
+                        Seasons
+                      </Link>
+                    </Button>
+                    <Button asChild size="sm" variant="outline">
                       <Link href={`/leagues/${league.id}/schedule`}>
                         Schedule
                       </Link>
